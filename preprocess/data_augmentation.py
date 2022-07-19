@@ -43,10 +43,6 @@ if __name__ == "__main__":
         reader = csv.reader(r)
         title = next(reader)
         rows = [row for row in reader]
-        # print(rows[1])
-        # # for i in tqdm(range(len(rows))):
-        # for i in tqdm(range(1)):
-        #     augmentation(i, rows)
         index = []
         for i in range(len(rows)):
             index.append(i)
