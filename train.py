@@ -9,11 +9,11 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from models.focal_loss import *
-from preprocess.data_handle import *
+from preprocess.utils import *
 from models.Xception import *
 from torch.utils.data import DataLoader
 from decals_dataset import *
-from preprocess.data_handle import *
+from preprocess.utils import *
 from grad_cam_utils import *
 from models.data_parallel import *
 import pickle as pkl
@@ -57,15 +57,13 @@ class trainer:
             train_loss = 0
             train_acc = 0
             self.model.train()
-            for i, (X, label) in enumerate(train_loader):  # 遍历train_loader
+            for i, (X, label) in enumerate(train_loader):
                 label = torch.as_tensor(label, dtype=torch.long)
                 '''******** - 非分布式 -********'''
                 # X, label = X.to(self.config.device), label.to(self.config.device)
                 '''******** - 分布式 -********'''
                 X = X.cuda()
                 label = label.cuda()
-                # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-                #     with record_function("model_cnn"):
                 out = self.model(X)  # 正向传播
                 loss_value = self.loss_func(out, label)  # 求损失值
                 self.optimizer.zero_grad()  # 优化器梯度归零
@@ -79,8 +77,7 @@ class trainer:
                 # print(prof.key_averages().table(sort_by="gpu_time_total", row_limit=10))
             writer.add_scalar('Training loss by steps', train_loss / len(train_loader), epoch)
             writer.add_scalar('Training accuracy by steps', train_acc / len(train_loader), epoch)
-
-            # writer.add_figure("Confusion matrix", cf_metrics(train_loader, self.model, False), epoch)
+            writer.add_figure("Confusion matrix", cf_metrics(train_loader, self.model, False), epoch)
             losses.append(train_loss / len(train_loader))
             acces.append(100 * train_acc / len(train_loader))
             print("epoch: ", epoch)
@@ -92,8 +89,9 @@ class trainer:
             eval_acc = 0
             with torch.no_grad():
                 self.model.eval()
-                for X, label in test_loader:
+                for X, label in valid_loader:
                     label = torch.as_tensor(label, dtype=torch.long)
+                    '''******** - 非分布式 -********'''
                     # X, label = X.to(self.config.device), label.to(self.config.device)
                     X = X.cuda()
                     label = label.cuda()
@@ -110,26 +108,12 @@ class trainer:
             writer.add_figure("Confusion matrix test",
                               cf_map(cfm),
                               epoch)
-            # target_layers = [model.module.exit_flow.conv]
-            # for batch_idx, (features, targets) in enumerate(train_loader):
-            #     if batch_idx == 0:
-            #         input = torch.unsqueeze(features[0], dim=0)
-            #         writer.add_image('raw', input[0], epoch, dataformats="CHW")
-            #         cam = GradCAM(model=model, target_layers=target_layers, use_cuda=True)
-            #         for target in range(data_config.num_class):
-            #             grayscale_cam = cam(input_tensor=input, target_category=target)
-            #             grayscale_cam = grayscale_cam[0, :]
-            #             img = np.zeros((3, 256, 256))
-            #             visualization = show_cam_on_image(img.astype(dtype=np.float32),
-            #                                               grayscale_cam,
-            #                                               use_rgb=True)
-            #             writer.add_image('%d grad-cam' % target, visualization, epoch, dataformats="HWC")
-            eval_losses.append(eval_loss / len(test_loader))
-            eval_acces.append(eval_acc / len(test_loader))
-            writer.add_scalar('Testing loss by steps', eval_loss / len(test_loader), epoch)
-            writer.add_scalar('Testing accuracy by steps', eval_acc / len(test_loader), epoch)
-            print("test_loss: " + str(eval_loss / len(test_loader)))
-            print("test_acc:" + str(eval_acc / len(test_loader)) + '\n')
+            eval_losses.append(eval_loss / len(valid_loader))
+            eval_acces.append(eval_acc / len(valid_loader))
+            writer.add_scalar('Validating loss by steps', eval_loss / len(valid_loader), epoch)
+            writer.add_scalar('Validating accuracy by steps', eval_acc / len(valid_loader), epoch)
+            print("valid_loss: " + str(eval_loss / len(valid_loader)))
+            print("valid_acc:" + str(eval_acc / len(valid_loader)) + '\n')
             checkpoint = {
                 "net": self.model.state_dict(),
                 'optimizer': self.optimizer.state_dict(),
@@ -144,19 +128,20 @@ train_data = DecalsDataset(annotations_file=data_config.train_file, transform=da
 train_loader = DataLoader(dataset=train_data, batch_size=data_config.batch_size,
                           shuffle=True, num_workers=data_config.WORKERS, pin_memory=True)
 
-test_data = DecalsDataset(annotations_file=data_config.valid_file, transform=data_config.transfer)
-test_loader = DataLoader(dataset=test_data, batch_size=data_config.batch_size,
-                         shuffle=True, num_workers=data_config.WORKERS, pin_memory=True)
-
-valid_data = DecalsDataset(annotations_file=data_config.test_file, transform=data_config.transfer)
+valid_data = DecalsDataset(annotations_file=data_config.valid_file, transform=data_config.transfer)
 valid_loader = DataLoader(dataset=valid_data, batch_size=data_config.batch_size,
-                          shuffle=False, num_workers=data_config.WORKERS, pin_memory=True)
+                          shuffle=True, num_workers=data_config.WORKERS, pin_memory=True)
+
+test_data = DecalsDataset(annotations_file=data_config.test_file, transform=data_config.transfer)
+test_loader = DataLoader(dataset=test_data, batch_size=data_config.batch_size,
+                         shuffle=False, num_workers=data_config.WORKERS, pin_memory=True)
+
 
 model = eval(data_config.model_name)(**data_config.model_parm)
 model = model.cuda()
 device_ids = [0, 1]
-# model = torch.nn.DataParallel(model, device_ids=device_ids)
-model = BalancedDataParallel(12, model, dim=0, device_ids=[0, 1])
+model = torch.nn.DataParallel(model, device_ids=device_ids)
+# model = BalancedDataParallel(12, model, dim=0, device_ids=[0, 1])
 
 loss_func = eval(data_config.loss_func)(**data_config.loss_func_parm)
 optimizer = eval(data_config.optimizer)(model.parameters(), **data_config.optimizer_parm)

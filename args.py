@@ -1,5 +1,5 @@
 import os
-from preprocess.data_handle import *
+from preprocess.utils import *
 import torchvision.transforms as transforms
 
 '''
@@ -17,12 +17,12 @@ class data_config:
     # model_parm = {'input_channels': input_channel, 'num_class': num_class}
     model_parm = {}  # 模型参数
     '''***********- dataset and directory -*************'''
-    root_path = '/data/renhaoye/decals_2022/'  # 根目录
+    root_path = '/data/renhaoye/MorCG/'  # 根目录
     origin = "decals"
     name = "BEST"
-    train_file = '/data/renhaoye/decals_2022/dataset_txt/%s-CLASS_7-%s-train.txt' % (origin, name)  # 训练集txt文件
-    valid_file = '/data/renhaoye/decals_2022/dataset_txt/%s-CLASS_7-%s-valid.txt' % (origin, name)  # 验证集txt文件
-    test_file = '/data/renhaoye/decals_2022/dataset_txt/%s-CLASS_7-%s-test.txt' % (origin, name)  # 测试集txt文件
+    train_file = '/data/renhaoye/MorCG/dataset/train.txt'  # 训练集txt文件
+    valid_file = '/data/renhaoye/MorCG/dataset/valid.txt'  # 验证集txt文件
+    test_file = '/data/renhaoye/MorCG/dataset/test.txt'  # 测试集txt文件
     transfer = transforms.Compose([transforms.ToTensor()])
 
     '''***********- Hyper Arguments -*************'''
@@ -33,10 +33,7 @@ class data_config:
     rand_seed = 1926  # 随机种子
     lr = 0.0001  # 学习率
     momentum = 0.9  # SGD的动量设置
-    weight = get_weight([13536, 24737, 26559, 17685, 11540, 14813, 6720])  # best
-    # weight = get_weight([13536 / 4, 24737, 26559, 17685, 11540, 14813, 6720 / 4])  # baseline
-    # weight = get_weight([23424, 24737, 26559, 21502, 11540, 14813, 13088])  # 7,threshold_c
-    # weight = get_weight([4*2283, 16972, 18245, 11842, 7529, 9991, 4*1122])  # sdss_weight
+    weight = get_weight([2174, 17480, 17024, 9937, 6902, 6087, 1291])  # best
     # optimizer = "torch.optim.Adam"
     optimizer = "torch.optim.AdamW"  # 优化器方法名称，eval()调用
     optimizer_parm = {'lr': lr, 'weight_decay': 0.01}  # 优化器参数
@@ -47,10 +44,10 @@ class data_config:
     device = "cuda:0"  # gpu
     # local_rank = 0, 1
     multi_gpu = False  # 多卡设置
-    other = "overlap_pretrained_1k4_64"  # 模型保存文件夹备注
-    model_path = root_path + 'trained_model/%s-LR_%s-LS_%s-CLS_%s-BSZ_%s-OPT_%s-%s/' \
+    other = "new"  # 模型保存文件夹备注
+    model_path = root_path + 'pth/%s-LR_%s-LS_%s-CLS_%s-BSZ_%s-OPT_%s-%s/' \
                  % (model_name, str(lr), loss_func, str(num_class), str(batch_size), optimizer.split(".")[-1], other)
-    metrix_save_path = "/data/renhaoye/decals_2022/sdss_pred_newFL.jpg"
+    metrix_save_path = "/data/renhaoye/MorCG/sdss_pred_newFL.jpg"
     classes = (
         "merger", "round", "between", "cigar",
         "edgeOn", "noBar", "strongBar")  # 类别名称
